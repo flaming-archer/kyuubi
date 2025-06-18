@@ -248,6 +248,186 @@ class HiveQuerySuite extends KyuubiHiveTest {
     readUnPartitionedTable("ORC", false)
   }
 
+  test("Partitioned table insert into static and dynamic insert") {
+    val table = "hive.default.employee"
+    withTempPartitionedTable(spark, table) {
+      spark.sql(
+        s"""
+           | INSERT INTO
+           | $table PARTITION(year = '2022')
+           | SELECT * FROM VALUES("yi", "08")
+           |""".stripMargin).collect()
+
+      checkQueryResult(s"select * from $table", spark, Array(Row.apply("yi", "2022", "08")))
+    }
+  }
+
+  test("filter pushdown - basic filters") {
+    val table = "hive.default.test_filter_pushdown"
+    withTempPartitionedTable(spark, table, "ORC", true) {
+
+      // Insert test data
+      spark.sql(
+        s"""
+        INSERT INTO $table VALUES
+        (1, '2021', 1),
+        (2, '2022', 2),
+        (3, '2023', 3),
+        (4, '2021', 1),
+        (5, '2022', 2),
+        (6, '2023', 3)
+      """)
+
+      // Test equal filter
+      val df1 = spark.sql(s"SELECT * FROM $table WHERE id in (2,4)")
+      assert(df1.count() === 2)
+      assert(df1.first().getString(0) === "2")
+
+      // Test greater than filter
+      val df2 = spark.sql(s"SELECT * FROM $table WHERE id > 2")
+      assert(df2.count() === 4)
+      assert(df2.collect().map(_.getString(2)).toSet === Set("1", "2", "3"))
+
+      // Test less than filter
+      val df3 = spark.sql(s"SELECT * FROM $table WHERE id < 2")
+      assert(df3.count() === 1)
+      assert(df3.collect().map(_.getString(2)).toSet === Set("1"))
+
+      // Test IN filter
+      val df4 = spark.sql(s"SELECT * FROM $table WHERE id IN (1, 3)")
+      assert(df4.count() === 2)
+      assert(df4.collect().map(_.getString(0)).toSet === Set("1", "3"))
+
+      // Test IS NULL filter
+      spark.sql(s"INSERT INTO $table VALUES (NULL, 2021, 1)")
+      val df5 = spark.sql(s"SELECT * FROM $table WHERE id IS NULL")
+      assert(df5.count() === 1)
+      assert(df5.first().getString(2) === "1")
+
+      // Test IS NOT NULL filter
+      val df6 = spark.sql(s"SELECT * FROM $table WHERE id IS NOT NULL")
+      assert(df6.count() === 6)
+    }
+  }
+
+  test("filter pushdown - complex filters") {
+    var table = "hive.default.test_complex_filters"
+    withTempPartitionedTable(spark, table, "ORC") {
+      spark.sql(s"""
+        CREATE TABLE $table (
+          id INT,
+          data STRING,
+          value INT
+        ) USING hive
+      """)
+
+      // Insert test data
+      spark.sql(s"""
+        INSERT INTO $table VALUES
+        (1, 'a', 100),
+        (2, 'b', 200),
+        (3, 'c', 300),
+        (4, 'd', 400),
+        (5, 'e', 500)
+      """)
+
+      // Test AND filter
+      val df1 = spark.sql(s"SELECT * FROM $table WHERE id > 2 AND value < 400")
+      assert(df1.count() === 1)
+      assert(df1.first().getInt(0) === 3)
+
+      // Test OR filter
+      val df2 = spark.sql(s"SELECT * FROM $table WHERE id = 1 OR id = 5")
+      assert(df2.count() === 2)
+      assert(df2.collect().map(_.getInt(0)).toSet === Set(1, 5))
+
+      // Test NOT filter
+      val df3 = spark.sql(s"SELECT * FROM $table WHERE NOT (id = 3)")
+      assert(df3.count() === 4)
+      assert(!df3.collect().map(_.getInt(0)).contains(3))
+
+      // Test string filters
+      val df4 = spark.sql(s"SELECT * FROM $table WHERE data LIKE 'a%'")
+      assert(df4.count() === 1)
+      assert(df4.first().getString(1) === "a")
+
+      val df5 = spark.sql(s"SELECT * FROM $table WHERE data LIKE '%e'")
+      assert(df5.count() === 1)
+      assert(df5.first().getString(1) === "e")
+
+      val df6 = spark.sql(s"SELECT * FROM $table WHERE data LIKE '%c%'")
+      assert(df6.count() === 1)
+      assert(df6.first().getString(1) === "c")
+    }
+  }
+
+  test("filter pushdown - partition filters") {
+    var table = "hive.default.test_partition_filters"
+    withTempPartitionedTable(spark, table, "ORC") {
+      spark.sql(s"""
+        CREATE TABLE $table (
+          id INT,
+          data STRING,
+          value INT
+        ) PARTITIONED BY (dt STRING, region STRING)
+        USING hive
+      """)
+
+      // Insert test data with partitions
+      spark.sql(s"""
+        INSERT INTO $table PARTITION (dt='2024-01-01', region='east')
+        VALUES (1, 'a', 100), (2, 'b', 200)
+      """)
+      spark.sql(s"""
+        INSERT INTO $table PARTITION (dt='2024-01-01', region='west')
+        VALUES (3, 'c', 300), (4, 'd', 400)
+      """)
+      spark.sql(s"""
+        INSERT INTO $table PARTITION (dt='2024-01-02', region='east')
+        VALUES (5, 'e', 500), (6, 'f', 600)
+      """)
+
+      // Test partition filter
+      val df1 = spark.sql(s"SELECT * FROM $table WHERE dt = '2024-01-01'")
+      assert(df1.count() === 4)
+
+      // Test partition and data filters
+      val df2 = spark.sql(s"SELECT * FROM $table WHERE dt = '2024-01-01' AND region = 'east'")
+      assert(df2.count() === 2)
+      assert(df2.collect().map(_.getInt(0)).toSet === Set(1, 2))
+
+      // Test multiple partition filters
+      val df3 = spark.sql(s"""
+        SELECT * FROM $table
+        WHERE dt = '2024-01-01' AND region = 'east' AND value > 150
+      """)
+      assert(df3.count() === 1)
+      assert(df3.first().getInt(0) === 2)
+    }
+  }
+
+  test("filter pushdown - unsupported filters") {
+    val table = "hive.default.test_unsupported_filters"
+    withTempPartitionedTable(spark, table, "ORC", true) {
+      // Insert test data
+      spark.sql(
+        s"""
+        INSERT INTO $table VALUES
+        (1, '2021', 1),
+        (2, '2022', 2),
+        (3, '2023', 3),
+        (4, '2021', 1),
+        (5, '2022', 2),
+        (6, '2023', 3)
+      """)
+
+      // Test unsupported filter (should still work but filter will be applied after scan)
+      val df = spark.sql(s"SELECT * FROM $table WHERE id > 2")
+      assert(df.count() === 4)
+      assert(df.first().getInt(0) === 3)
+    }
+  }
+
   private def readPartitionedTable(format: String, hiveTable: Boolean): Unit = {
     withSparkSession() { spark =>
       val table = "hive.default.employee"
