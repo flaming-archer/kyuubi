@@ -378,4 +378,212 @@ class IcebergCatalogRangerSparkExtensionSuite extends RangerSparkExtensionSuite 
       doAs(admin, sql(callSetCurrentSnapshot))
     }
   }
+
+  test("ALTER TABLE ADD PARTITION FIELD for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int, name string, city string) USING iceberg PARTITIONED BY (city)"))
+      val addPartitionSql = s"ALTER TABLE $table ADD PARTITION FIELD id"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(addPartitionSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(addPartitionSql))
+    }
+  }
+
+  test("ALTER TABLE DROP PARTITION FIELD for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int, name string, city string) USING iceberg PARTITIONED BY (id, city)"))
+      val addPartitionSql = s"ALTER TABLE $table DROP PARTITION FIELD id"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(addPartitionSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(addPartitionSql))
+    }
+  }
+
+  test("ALTER TABLE REPLACE PARTITION FIELD for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int, name string, city string) USING iceberg PARTITIONED BY (city)"))
+      val addPartitionSql = s"ALTER TABLE $table REPLACE PARTITION FIELD city WITH id"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(addPartitionSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(addPartitionSql))
+    }
+  }
+
+  test("ALTER TABLE WRITE ORDER BY for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int, name string, city string) USING iceberg"))
+      val writeOrderBySql = s"ALTER TABLE $table WRITE ORDERED BY id"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(writeOrderBySql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(writeOrderBySql))
+    }
+  }
+
+  test("ALTER TABLE WRITE DISTRIBUTED BY PARTITION for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int, name string, city string) USING iceberg PARTITIONED BY (city)"))
+      val writeDistributedSql = s"ALTER TABLE $table WRITE DISTRIBUTED BY PARTITION"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(writeDistributedSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(writeDistributedSql))
+    }
+  }
+
+  test("ALTER TABLE SET IDENTIFIER FIELD for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      val setIdentifierSql = s"ALTER TABLE $table SET IDENTIFIER FIELDS id"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(setIdentifierSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(setIdentifierSql))
+    }
+  }
+
+  test("ALTER TABLE DROP IDENTIFIER FIELD for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"ALTER TABLE $table SET IDENTIFIER FIELDS id"))
+      val dropIdentifierSql = s"ALTER TABLE $table DROP IDENTIFIER FIELDS id"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(dropIdentifierSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(dropIdentifierSql))
+    }
+  }
+
+  test("CREATE BRANCH for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (1, 'test', 'city')"))
+      val createBranchSql = s"ALTER TABLE $table CREATE BRANCH test_branch"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(createBranchSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(createBranchSql))
+    }
+  }
+
+  test("CREATE TAG for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (1, 'test', 'city')"))
+      val createTagSql = s"ALTER TABLE $table CREATE TAG test_tag"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(createTagSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(createTagSql))
+    }
+  }
+
+  test("REPLACE BRANCH for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (1, 'test', 'city')"))
+      doAs(admin, sql(s"ALTER TABLE $table CREATE BRANCH test_branch"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (2, 'test2', 'city2')"))
+      val replaceBranchSql = s"ALTER TABLE $table REPLACE BRANCH test_branch"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(replaceBranchSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(replaceBranchSql))
+    }
+  }
+
+  test("REPLACE TAG for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (1, 'test', 'city')"))
+      doAs(admin, sql(s"ALTER TABLE $table CREATE TAG test_tag"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (2, 'test2', 'city2')"))
+      val replaceTagSql = s"ALTER TABLE $table REPLACE TAG test_tag"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(replaceTagSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(replaceTagSql))
+    }
+  }
+
+  test("DROP BRANCH for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (1, 'test', 'city')"))
+      doAs(admin, sql(s"ALTER TABLE $table CREATE BRANCH test_branch"))
+      val dropBranchSql = s"ALTER TABLE $table DROP BRANCH test_branch"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(dropBranchSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(dropBranchSql))
+    }
+  }
+
+  test("DROP TAG for Iceberg") {
+    val table = s"$catalogV2.$namespace1.partitioned_table"
+    withCleanTmpResources(Seq((table, "table"))) {
+      doAs(
+        admin,
+        sql(
+          s"CREATE TABLE $table (id int NOT NULL, name string, city string) USING iceberg"))
+      doAs(admin, sql(s"INSERT INTO $table VALUES (1, 'test', 'city')"))
+      doAs(admin, sql(s"ALTER TABLE $table CREATE TAG test_tag"))
+      val dropTagSql = s"ALTER TABLE $table DROP TAG test_tag"
+      interceptEndsWith[AccessControlException] {
+        doAs(someone, sql(dropTagSql))
+      }(s"does not have [alter] privilege on [$namespace1/partitioned_table]")
+      doAs(admin, sql(dropTagSql))
+    }
+  }
 }
