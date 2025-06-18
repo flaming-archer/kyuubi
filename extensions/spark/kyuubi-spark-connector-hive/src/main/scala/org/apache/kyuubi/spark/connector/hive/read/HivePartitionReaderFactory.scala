@@ -19,14 +19,19 @@ package org.apache.kyuubi.spark.connector.hive.read
 
 import java.net.URI
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Output
+import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE
 import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapred._
+import org.apache.orc.OrcConf
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -51,7 +56,9 @@ case class HivePartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     partFileToHivePart: Map[PartitionedFile, CatalogTablePartition],
-    pushedFilters: Array[Filter] = Array.empty)
+    pushedFilters: Array[Filter] = Array.empty,
+    isCaseSensitive: Boolean,
+    tableType: String)
   extends PartitionReaderFactory with Logging {
 
   private val charset: String =
@@ -67,6 +74,19 @@ case class HivePartitionReaderFactory(
       filePartition.files.toIterator.map { file =>
         val bindHivePart = partFileToHivePart.get(file)
         val hivePartition = bindHivePart.map(HiveClientImpl.toHivePartition(_, hiveTable))
+
+        if (tableType.equals("ORC")) {
+          // Apply pushed filters to Hive configuration
+          OrcFilters.createFilter(readDataSchema, pushedFilters, isCaseSensitive).foreach { f =>
+            // Sets pushed predicates
+            broadcastHiveConf.value.value.set("sarg.pushdown", toKryo(f))
+            // broadcastHiveConf.value.value.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+            broadcastHiveConf.value.value.setBoolean(
+              OrcConf.ALLOW_SARG_TO_FILTER.getAttribute,
+              true)
+          }
+        }
+
         HivePartitionedFileReader(
           file,
           new PartitionReaderWithPartitionValues(
@@ -83,6 +103,16 @@ case class HivePartitionReaderFactory(
             file.partitionValues))
       }
     new SparkFilePartitionReader[InternalRow](iter)
+  }
+
+  // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.
+  // This is copied from Hive 1.2's SearchArgumentImpl.toKryo().
+  private def toKryo(sarg: SearchArgument): String = {
+    val kryo = new Kryo()
+    val out = new Output(4 * 1024, 10 * 1024 * 1024)
+    kryo.writeObject(out, sarg)
+    out.close()
+    Base64.encodeBase64String(out.toBytes)
   }
 
   private def buildReaderInternal(
@@ -111,6 +141,11 @@ case class HivePartitionReaderFactory(
     }
 
     val jobConf = new JobConf(broadcastHiveConf.value.value)
+
+    if (pushedFilters.nonEmpty) {
+      val filterExpr = pushedFilters.map(_.toString).mkString(" AND ")
+      jobConf.set("hive.io.filter.expr", filterExpr)
+    }
 
     val filePath = new Path(new URI(HiveConnectorUtils.partitionedFilePath(file)))
 

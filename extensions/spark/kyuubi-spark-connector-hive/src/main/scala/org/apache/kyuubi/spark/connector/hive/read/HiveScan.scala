@@ -46,7 +46,8 @@ case class HiveScan(
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter] = Array.empty,
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty,
+    tableType: String) extends FileScan {
 
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
@@ -79,7 +80,9 @@ case class HiveScan(
       readDataSchema,
       readPartitionSchema,
       partFileToHivePartMap.toMap,
-      pushedFilters = pushedFilters)
+      pushedFilters = pushedFilters,
+      isCaseSensitive = isCaseSensitive,
+      tableType = tableType)
   }
 
   override protected def partitions: Seq[FilePartition] = {

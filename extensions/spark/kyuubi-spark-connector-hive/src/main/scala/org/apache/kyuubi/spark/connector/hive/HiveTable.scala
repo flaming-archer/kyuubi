@@ -77,7 +77,7 @@ case class HiveTable(
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    HiveScanBuilder(sparkSession, fileIndex, dataSchema, catalogTable)
+    HiveScanBuilder(sparkSession, fileIndex, schema, dataSchema, catalogTable)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
