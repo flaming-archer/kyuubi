@@ -15,16 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.kyuubi.spark.connector.hive.read
-
-import java.util.Locale
-
-import scala.collection.mutable
+package org.apache.kyuubi.spark.connector.hive.read.orc
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitionedFile
@@ -32,17 +28,20 @@ import org.apache.spark.sql.hive.kyuubi.connector.HiveBridgeHelper.HiveClientImp
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
+import scala.collection.mutable
 
-case class HiveScan(
-    sparkSession: SparkSession,
-    fileIndex: HiveCatalogFileIndex,
-    catalogTable: CatalogTable,
-    dataSchema: StructType,
-    readDataSchema: StructType,
-    readPartitionSchema: StructType,
-    pushedFilters: Array[Filter] = Array.empty,
-    partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty)
+import org.apache.kyuubi.spark.connector.hive.read.{AbstractHiveScan, HiveCatalogFileIndex, HiveReader}
+
+case class ORCHiveScan(
+                        sparkSession: SparkSession,
+                        fileIndex: HiveCatalogFileIndex,
+                        catalogTable: CatalogTable,
+                        dataSchema: StructType,
+                        readDataSchema: StructType,
+                        readPartitionSchema: StructType,
+                        pushedFilters: Array[Filter] = Array.empty,
+                        partitionFilters: Seq[Expression] = Seq.empty,
+                        dataFilters: Seq[Expression] = Seq.empty)
   extends AbstractHiveScan(
     sparkSession,
     fileIndex,
@@ -52,21 +51,15 @@ case class HiveScan(
     readPartitionSchema,
     pushedFilters,
     partitionFilters,
-    dataFilters) {
+    dataFilters
+  ) {
 
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
   private val partFileToHivePartMap: mutable.Map[PartitionedFile, CatalogTablePartition] =
     mutable.Map()
 
-  override def isSplitable(path: Path): Boolean = {
-    catalogTable.provider.map(_.toUpperCase(Locale.ROOT)).exists {
-      case "PARQUET" => true
-      case "ORC" => true
-      case "HIVE" => isHiveOrcOrParquet(catalogTable.storage)
-      case _ => super.isSplitable(path)
-    }
-  }
+  override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val hiveConf = new Configuration(fileIndex.hiveCatalog.hadoopConfiguration())
@@ -77,16 +70,16 @@ case class HiveScan(
     val broadcastHiveConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hiveConf))
 
-    HivePartitionReaderFactory(
+    ORCHivePartitionReaderFactory(
       sparkSession.sessionState.conf.clone(),
       broadcastHiveConf,
       table,
-      dataSchema,
       readDataSchema,
       readPartitionSchema,
       partFileToHivePartMap.toMap,
       pushedFilters = pushedFilters,
-      isCaseSensitive = isCaseSensitive)
+      isCaseSensitive = isCaseSensitive,
+      dataSchema)
   }
 
   private def addCatalogTableConfToConf(hiveConf: Configuration, table: CatalogTable): Unit = {
@@ -94,11 +87,6 @@ case class HiveScan(
       case (key, value) =>
         hiveConf.set(key, value)
     }
-  }
-
-  private def isHiveOrcOrParquet(storage: CatalogStorageFormat): Boolean = {
-    val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") || serde.contains("orc")
   }
 
 }

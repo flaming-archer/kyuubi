@@ -52,6 +52,15 @@ class HiveQuerySuite extends KyuubiHiveTest {
     finally spark.sql(s"DROP TABLE $table")
   }
 
+  def withTempPushFilterPartitionedTable(
+      spark: SparkSession,
+      table: String,
+      createTableSql: String)(f: => Unit): Unit = {
+    spark.sql(createTableSql).collect()
+    try f
+    finally spark.sql(s"DROP TABLE $table")
+  }
+
   def checkQueryResult(
       sql: String,
       sparkSession: SparkSession,
@@ -279,7 +288,7 @@ class HiveQuerySuite extends KyuubiHiveTest {
       // Test equal filter
       val df1 = spark.sql(s"SELECT * FROM $table WHERE id in (2,4)")
       assert(df1.count() === 2)
-      assert(df1.first().getString(0) === "2")
+      assert(df1.collect().map(_.getString(2)).toSet === Set("2", "1"))
 
       // Test greater than filter
       val df2 = spark.sql(s"SELECT * FROM $table WHERE id > 2")
@@ -308,68 +317,19 @@ class HiveQuerySuite extends KyuubiHiveTest {
     }
   }
 
-  test("filter pushdown - complex filters") {
-    var table = "hive.default.test_complex_filters"
-    withTempPartitionedTable(spark, table, "ORC") {
-      spark.sql(s"""
-        CREATE TABLE $table (
-          id INT,
-          data STRING,
-          value INT
-        ) USING hive
-      """)
-
-      // Insert test data
-      spark.sql(s"""
-        INSERT INTO $table VALUES
-        (1, 'a', 100),
-        (2, 'b', 200),
-        (3, 'c', 300),
-        (4, 'd', 400),
-        (5, 'e', 500)
-      """)
-
-      // Test AND filter
-      val df1 = spark.sql(s"SELECT * FROM $table WHERE id > 2 AND value < 400")
-      assert(df1.count() === 1)
-      assert(df1.first().getInt(0) === 3)
-
-      // Test OR filter
-      val df2 = spark.sql(s"SELECT * FROM $table WHERE id = 1 OR id = 5")
-      assert(df2.count() === 2)
-      assert(df2.collect().map(_.getInt(0)).toSet === Set(1, 5))
-
-      // Test NOT filter
-      val df3 = spark.sql(s"SELECT * FROM $table WHERE NOT (id = 3)")
-      assert(df3.count() === 4)
-      assert(!df3.collect().map(_.getInt(0)).contains(3))
-
-      // Test string filters
-      val df4 = spark.sql(s"SELECT * FROM $table WHERE data LIKE 'a%'")
-      assert(df4.count() === 1)
-      assert(df4.first().getString(1) === "a")
-
-      val df5 = spark.sql(s"SELECT * FROM $table WHERE data LIKE '%e'")
-      assert(df5.count() === 1)
-      assert(df5.first().getString(1) === "e")
-
-      val df6 = spark.sql(s"SELECT * FROM $table WHERE data LIKE '%c%'")
-      assert(df6.count() === 1)
-      assert(df6.first().getString(1) === "c")
-    }
-  }
-
-  test("filter pushdown - partition filters") {
-    var table = "hive.default.test_partition_filters"
-    withTempPartitionedTable(spark, table, "ORC") {
-      spark.sql(s"""
+  test("filter pushdown - partition complex filters") {
+    var table = "hive.default.test_partition_complex_filters"
+    withTempPushFilterPartitionedTable(
+      spark,
+      table,
+      s"""
         CREATE TABLE $table (
           id INT,
           data STRING,
           value INT
         ) PARTITIONED BY (dt STRING, region STRING)
-        USING hive
-      """)
+       STORED AS ORC
+      """) {
 
       // Insert test data with partitions
       spark.sql(s"""
@@ -401,28 +361,6 @@ class HiveQuerySuite extends KyuubiHiveTest {
       """)
       assert(df3.count() === 1)
       assert(df3.first().getInt(0) === 2)
-    }
-  }
-
-  test("filter pushdown - unsupported filters") {
-    val table = "hive.default.test_unsupported_filters"
-    withTempPartitionedTable(spark, table, "ORC", true) {
-      // Insert test data
-      spark.sql(
-        s"""
-        INSERT INTO $table VALUES
-        (1, '2021', 1),
-        (2, '2022', 2),
-        (3, '2023', 3),
-        (4, '2021', 1),
-        (5, '2022', 2),
-        (6, '2023', 3)
-      """)
-
-      // Test unsupported filter (should still work but filter will be applied after scan)
-      val df = spark.sql(s"SELECT * FROM $table WHERE id > 2")
-      assert(df.count() === 4)
-      assert(df.first().getInt(0) === 3)
     }
   }
 

@@ -28,6 +28,8 @@ import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
+import org.apache.kyuubi.spark.connector.hive.read.orc.{OrcFilters, ORCHiveScan}
+
 case class HiveScanBuilder(
     sparkSession: SparkSession,
     fileIndex: HiveCatalogFileIndex,
@@ -38,35 +40,37 @@ case class HiveScanBuilder(
 
   private var pushedAggregations = Option.empty[Aggregation]
   private var finalSchema = new StructType()
+  private var finalTableType = Option.empty[String]
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
-    tableType() match {
-      case "ORC" => if (sparkSession.sessionState.conf.orcFilterPushDown) {
-          val dataTypeMap = OrcFilters.getSearchableTypeMap(
-            readDataSchema(),
-            sparkSession.sessionState.conf.caseSensitiveAnalysis)
-          OrcFilters.convertibleFilters(dataTypeMap, dataFilters).toArray
-        } else {
-          Array.empty[Filter]
-        }
-      case _ => Array.empty[Filter]
+    if (finalTableType.isEmpty) {
+      finalTableType = tableType()
+    }
 
+    finalTableType match {
+      case Some("ORC") if sparkSession.sessionState.conf.orcFilterPushDown =>
+        val dataTypeMap = OrcFilters.getSearchableTypeMap(
+          readDataSchema(),
+          sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        OrcFilters.convertibleFilters(dataTypeMap, dataFilters).toArray
+      case _ => Array.empty[Filter]
     }
   }
 
-  def tableType(): String = {
+  def tableType(): Option[String] = {
     val serde = table.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
     val parquet = serde.contains("parquet")
     val orc = serde.contains("orc")
     val provider = table.provider.map(_.toUpperCase(Locale.ROOT))
-    if (orc | provider.exists(p => p.equals("ORC"))) {
-      return "ORC"
+    if (orc | provider.contains("ORC")) {
+      return Some("ORC")
     }
 
-    if (parquet | provider.exists(p => p.equals("PARQUET"))) {
-      return "PARQUET"
+    if (parquet | provider.contains("PARQUET")) {
+      return Some("PARQUET")
     }
-    ""
+
+    None
   }
 
   override def build(): Scan = {
@@ -77,17 +81,33 @@ case class HiveScanBuilder(
       finalSchema = readDataSchema()
     }
 
-    HiveScan(
-      sparkSession = sparkSession,
-      fileIndex = fileIndex,
-      catalogTable = table,
-      dataSchema = dataSchema,
-      readDataSchema = finalSchema,
-      readPartitionSchema = readPartitionSchema(),
-      pushedFilters = pushedDataFilters,
-      partitionFilters = partitionFilters,
-      dataFilters = dataFilters,
-      tableType = tableType())
+    if (finalTableType.isEmpty) {
+      finalTableType = tableType()
+    }
+
+    finalTableType match {
+      case Some("ORC") => ORCHiveScan(
+          sparkSession = sparkSession,
+          fileIndex = fileIndex,
+          catalogTable = table,
+          dataSchema = dataSchema,
+          readDataSchema = finalSchema,
+          readPartitionSchema = readPartitionSchema(),
+          pushedFilters = pushedDataFilters,
+          partitionFilters = partitionFilters,
+          dataFilters = dataFilters)
+      case _ =>
+        HiveScan(
+          sparkSession = sparkSession,
+          fileIndex = fileIndex,
+          catalogTable = table,
+          dataSchema = dataSchema,
+          readDataSchema = finalSchema,
+          readPartitionSchema = readPartitionSchema(),
+          pushedFilters = pushedDataFilters,
+          partitionFilters = partitionFilters,
+          dataFilters = dataFilters)
+    }
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {

@@ -294,7 +294,8 @@
             --add-opens=java.base/sun.security.x509=ALL-UNNAMED
             --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
             -Djdk.reflect.useDirectMethodHandle=false
-            -Dio.netty.tryReflectionSetAccessible=true</extraJavaTestArgs>
+            -Dio.netty.tryReflectionSetAccessible=true
+        </extraJavaTestArgs>
 
         <debugArgLine>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005</debugArgLine>
     </properties>
@@ -1486,11 +1487,14 @@
                             <log4j2.configurationFile>src/test/resources/log4j2-test.xml</log4j2.configurationFile>
                             <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
                             <spark.driver.memory>1g</spark.driver.memory>
-                            <kyuubi.metrics.json.location>${project.build.directory}/metrics</kyuubi.metrics.json.location>
+                            <kyuubi.metrics.json.location>${project.build.directory}/metrics
+                            </kyuubi.metrics.json.location>
                             <kyuubi.frontend.bind.host>localhost</kyuubi.frontend.bind.host>
                             <sun.security.krb5.debug>false</sun.security.krb5.debug>
-                            <kyuubi.operation.log.dir.root>${project.build.directory}/server_operation_logs</kyuubi.operation.log.dir.root>
-                            <kyuubi.engine.operation.log.dir.root>${project.build.directory}/engine_operation_logs</kyuubi.engine.operation.log.dir.root>
+                            <kyuubi.operation.log.dir.root>${project.build.directory}/server_operation_logs
+                            </kyuubi.operation.log.dir.root>
+                            <kyuubi.engine.operation.log.dir.root>${project.build.directory}/engine_operation_logs
+                            </kyuubi.engine.operation.log.dir.root>
                         </systemPropertyVariables>
                     </configuration>
                 </plugin>
@@ -1513,11 +1517,14 @@
                             <log4j2.configurationFile>src/test/resources/log4j2-test.xml</log4j2.configurationFile>
                             <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
                             <spark.driver.memory>1g</spark.driver.memory>
-                            <kyuubi.metrics.json.location>${project.build.directory}/metrics</kyuubi.metrics.json.location>
+                            <kyuubi.metrics.json.location>${project.build.directory}/metrics
+                            </kyuubi.metrics.json.location>
                             <kyuubi.frontend.bind.host>localhost</kyuubi.frontend.bind.host>
                             <sun.security.krb5.debug>false</sun.security.krb5.debug>
-                            <kyuubi.operation.log.dir.root>${project.build.directory}/server_operation_logs</kyuubi.operation.log.dir.root>
-                            <kyuubi.engine.operation.log.dir.root>${project.build.directory}/engine_operation_logs</kyuubi.engine.operation.log.dir.root>
+                            <kyuubi.operation.log.dir.root>${project.build.directory}/server_operation_logs
+                            </kyuubi.operation.log.dir.root>
+                            <kyuubi.engine.operation.log.dir.root>${project.build.directory}/engine_operation_logs
+                            </kyuubi.engine.operation.log.dir.root>
                         </systemProperties>
                         <tagsToExclude>${maven.plugin.scalatest.exclude.tags}</tagsToExclude>
                         <tagsToInclude>${maven.plugin.scalatest.include.tags}</tagsToInclude>
@@ -1819,8 +1826,10 @@
                     <configuration>
                         <nodeVersion>${node.version}</nodeVersion>
                         <pnpmVersion>${pnpm.version}</pnpmVersion>
-                        <npmInheritsProxyConfigFromMaven>${maven.plugin.frontend.inheritsProxyConfigFromMaven}</npmInheritsProxyConfigFromMaven>
-                        <pnpmInheritsProxyConfigFromMaven>${maven.plugin.frontend.inheritsProxyConfigFromMaven}</pnpmInheritsProxyConfigFromMaven>
+                        <npmInheritsProxyConfigFromMaven>${maven.plugin.frontend.inheritsProxyConfigFromMaven}
+                        </npmInheritsProxyConfigFromMaven>
+                        <pnpmInheritsProxyConfigFromMaven>${maven.plugin.frontend.inheritsProxyConfigFromMaven}
+                        </pnpmInheritsProxyConfigFromMaven>
                     </configuration>
                 </plugin>
             </plugins>
@@ -2078,7 +2087,9 @@
                 <!-- TODO: update once Paimon support Spark 4.0.
                            paimon-spark-3.5 contains Scala 2.12 classes cause conflicts with Scala 2.13 -->
                 <paimon.artifact>paimon-common</paimon.artifact>
-                <maven.plugin.scalatest.exclude.tags>org.scalatest.tags.Slow,org.apache.kyuubi.tags.DeltaTest,org.apache.kyuubi.tags.IcebergTest,org.apache.kyuubi.tags.PaimonTest,org.apache.kyuubi.tags.HudiTest</maven.plugin.scalatest.exclude.tags>
+                <maven.plugin.scalatest.exclude.tags>
+                    org.scalatest.tags.Slow,org.apache.kyuubi.tags.DeltaTest,org.apache.kyuubi.tags.IcebergTest,org.apache.kyuubi.tags.PaimonTest,org.apache.kyuubi.tags.HudiTest
+                </maven.plugin.scalatest.exclude.tags>
                 <spark.archive.name>spark-${spark.version}-bin-hadoop3.tgz</spark.archive.name>
             </properties>
         </profile>
@@ -2088,7 +2099,9 @@
             <properties>
                 <spark.version>4.0.0-SNAPSHOT</spark.version>
                 <antlr4.version>4.13.1</antlr4.version>
-                <maven.plugin.scalatest.exclude.tags>org.scalatest.tags.Slow,org.apache.kyuubi.tags.DeltaTest,org.apache.kyuubi.tags.IcebergTest,org.apache.kyuubi.tags.PaimonTest,org.apache.kyuubi.tags.HudiTest,org.apache.kyuubi.tags.PySparkTest</maven.plugin.scalatest.exclude.tags>
+                <maven.plugin.scalatest.exclude.tags>
+                    org.scalatest.tags.Slow,org.apache.kyuubi.tags.DeltaTest,org.apache.kyuubi.tags.IcebergTest,org.apache.kyuubi.tags.PaimonTest,org.apache.kyuubi.tags.HudiTest,org.apache.kyuubi.tags.PySparkTest
+                </maven.plugin.scalatest.exclude.tags>
             </properties>
             <repositories>
                 <repository>
@@ -2135,7 +2148,8 @@
         <profile>
             <id>zookeeper-3.6</id>
             <properties>
-                <kyuubi-relocated-zookeeper.artifacts>kyuubi-relocated-zookeeper-36</kyuubi-relocated-zookeeper.artifacts>
+                <kyuubi-relocated-zookeeper.artifacts>kyuubi-relocated-zookeeper-36
+                </kyuubi-relocated-zookeeper.artifacts>
             </properties>
         </profile>
 
