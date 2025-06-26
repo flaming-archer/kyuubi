@@ -334,33 +334,67 @@ class HiveQuerySuite extends KyuubiHiveTest {
       // Insert test data with partitions
       spark.sql(s"""
         INSERT INTO $table PARTITION (dt='2024-01-01', region='east')
-        VALUES (1, 'a', 100), (2, 'b', 200)
+        VALUES (1, 'a', 100), (2, 'b', 200), (11, 'aa', 100), (22, 'b', 200)
       """)
       spark.sql(s"""
         INSERT INTO $table PARTITION (dt='2024-01-01', region='west')
-        VALUES (3, 'c', 300), (4, 'd', 400)
+        VALUES (3, 'c', 300), (4, 'd', 400), (33, 'cc', 300), (44, 'dd', 400)
       """)
       spark.sql(s"""
         INSERT INTO $table PARTITION (dt='2024-01-02', region='east')
-        VALUES (5, 'e', 500), (6, 'f', 600)
+        VALUES (5, 'e', 500), (6, 'f', 600), (55, 'ee', 500), (66, 'ff', 600)
       """)
 
-      // Test partition filter
-      val df1 = spark.sql(s"SELECT * FROM $table WHERE dt = '2024-01-01'")
-      assert(df1.count() === 4)
-
-      // Test partition and data filters
-      val df2 = spark.sql(s"SELECT * FROM $table WHERE dt = '2024-01-01' AND region = 'east'")
-      assert(df2.count() === 2)
-      assert(df2.collect().map(_.getInt(0)).toSet === Set(1, 2))
+      // Test multiple partition filters
+      val df2 = spark.sql(s"""
+        SELECT * FROM $table
+        WHERE dt = '2024-01-01' AND region = 'east' AND value > 1500
+      """)
+      assert(df2.count() === 0)
 
       // Test multiple partition filters
       val df3 = spark.sql(s"""
         SELECT * FROM $table
         WHERE dt = '2024-01-01' AND region = 'east' AND value > 150
       """)
-      assert(df3.count() === 1)
-      assert(df3.first().getInt(0) === 2)
+      assert(df3.count() === 2)
+      assert(df3.collect().map(_.getInt(0)).toSet === Set(2, 22))
+
+      // Test aggregation pushdown partition filters
+      val df4 = spark.sql(s"""
+        SELECT count(*) as total_rows,
+         sum(value) as sum_values,
+         avg(value) as avg_values,
+         max(value) as max_values,
+         min(value) as min_values
+         FROM $table
+        WHERE dt = '2024-01-01' AND region = 'east' AND value > 150
+      """)
+      assert(df4.count() === 1)
+      assert(df4.collect().map(_.getLong(0)).toSet === Set(2L))
+
+      // Test aggregation pushdown partition filters
+      val df5 = spark.sql(s"""
+        SELECT count(*) as total_rows,
+         sum(value) as sum_values,
+         avg(value) as avg_values,
+         max(value) as max_values,
+         min(value) as min_values
+         FROM $table
+        WHERE dt = '2024-01-01' AND region = 'east' AND value > 1
+        group by value
+      """)
+      assert(df5.count() === 2)
+      assert(df5.collect().map(_.getLong(0)).toSet === Set(2L))
+
+      // Test explain
+      val df6 = spark.sql(s"""
+       EXPLAIN SELECT count(*) as total_rows
+        FROM $table
+        WHERE dt = '2024-01-01' AND region = 'east' AND value > 1
+      """)
+      assert(df6.count() === 1)
+      assert(df6.collect().map(_.getString(0)).toSet.contains("PushedFilters: []") === false)
     }
   }
 

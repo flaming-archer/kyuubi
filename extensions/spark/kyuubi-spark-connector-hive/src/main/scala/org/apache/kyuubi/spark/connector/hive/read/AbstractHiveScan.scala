@@ -45,9 +45,9 @@ abstract class AbstractHiveScan(
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
 
-  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+  val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
-  private val partFileToHivePartMap: mutable.Map[PartitionedFile, CatalogTablePartition] =
+  val partFileToHivePartMap: mutable.Map[PartitionedFile, CatalogTablePartition] =
     mutable.Map()
 
   override protected def partitions: Seq[FilePartition] = {

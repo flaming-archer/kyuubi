@@ -20,28 +20,26 @@ package org.apache.kyuubi.spark.connector.hive.read.orc
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.hive.kyuubi.connector.HiveBridgeHelper.HiveClientImpl
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
-import scala.collection.mutable
 
 import org.apache.kyuubi.spark.connector.hive.read.{AbstractHiveScan, HiveCatalogFileIndex, HiveReader}
 
 case class ORCHiveScan(
-                        sparkSession: SparkSession,
-                        fileIndex: HiveCatalogFileIndex,
-                        catalogTable: CatalogTable,
-                        dataSchema: StructType,
-                        readDataSchema: StructType,
-                        readPartitionSchema: StructType,
-                        pushedFilters: Array[Filter] = Array.empty,
-                        partitionFilters: Seq[Expression] = Seq.empty,
-                        dataFilters: Seq[Expression] = Seq.empty)
+    sparkSession: SparkSession,
+    fileIndex: HiveCatalogFileIndex,
+    catalogTable: CatalogTable,
+    dataSchema: StructType,
+    readDataSchema: StructType,
+    readPartitionSchema: StructType,
+    pushedFilters: Array[Filter] = Array.empty,
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty)
   extends AbstractHiveScan(
     sparkSession,
     fileIndex,
@@ -51,13 +49,7 @@ case class ORCHiveScan(
     readPartitionSchema,
     pushedFilters,
     partitionFilters,
-    dataFilters
-  ) {
-
-  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-
-  private val partFileToHivePartMap: mutable.Map[PartitionedFile, CatalogTablePartition] =
-    mutable.Map()
+    dataFilters) {
 
   override def isSplitable(path: Path): Boolean = true
 
@@ -87,6 +79,10 @@ case class ORCHiveScan(
       case (key, value) =>
         hiveConf.set(key, value)
     }
+  }
+
+  override def getMetaData(): Map[String, String] = {
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
   }
 
 }

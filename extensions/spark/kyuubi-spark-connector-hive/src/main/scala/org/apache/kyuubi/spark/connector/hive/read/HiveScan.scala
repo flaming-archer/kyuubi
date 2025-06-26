@@ -19,15 +19,12 @@ package org.apache.kyuubi.spark.connector.hive.read
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.hive.kyuubi.connector.HiveBridgeHelper.HiveClientImpl
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -53,11 +50,6 @@ case class HiveScan(
     pushedFilters,
     partitionFilters,
     dataFilters) {
-
-  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-
-  private val partFileToHivePartMap: mutable.Map[PartitionedFile, CatalogTablePartition] =
-    mutable.Map()
 
   override def isSplitable(path: Path): Boolean = {
     catalogTable.provider.map(_.toUpperCase(Locale.ROOT)).exists {
