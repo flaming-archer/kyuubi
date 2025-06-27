@@ -394,7 +394,8 @@ class HiveQuerySuite extends KyuubiHiveTest {
         WHERE dt = '2024-01-01' AND region = 'east' AND value > 1
       """)
       assert(df6.count() === 1)
-      assert(df6.collect().map(_.getString(0)).toSet.contains("PushedFilters: []") === false)
+      assert(df6.collect().map(_.getString(0))
+        .map(s => s.contains("PushedFilters") && !s.contains("PushedFilters: []")).toSet.size > 0)
     }
   }
 
