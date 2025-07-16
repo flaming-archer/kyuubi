@@ -540,18 +540,21 @@ class HiveQuerySuite extends KyuubiHiveTest {
            |  WHERE d.category = 'Electronics' AND d.is_active = true
            |""".stripMargin)
       assert(df1.count() === 10)
+      // print physic plan
+      df1.explain("extended")
 
       // Test explain
-      val df3 = spark.sql(
+      val df2 = spark.sql(
         s"""
            |  EXPLAIN SELECT f.sale_id, f.sale_date, d.product_name, f.sale_amount
            |  FROM fact_sales f JOIN dim_products d ON f.product_id = d.product_id
            |  WHERE d.category = 'Electronics' AND d.is_active = true
            |""".stripMargin)
-      assert(df3.count() === 1)
-      // contains like : PushedFilters: [IsNotNull(value), GreaterThan(value,1)]
-      assert(df3.collect().map(_.getString(0)).filter { s =>
-        s.contains("dynamicpruning") && !s.contains("dynamicpruning: []")
+      assert(df2.count() === 1)
+      // contains like : PartitionFilters: [isnotnull(product_id#226),
+      // dynamicpruningexpression(product_id#226 IN dynamicpruning#234)]
+      assert(df2.collect().map(_.getString(0)).filter { s =>
+        s.contains("dynamicpruningexpression") && !s.contains("dynamicpruningexpression()")
       }.toSet.size == 1)
     }
   }
