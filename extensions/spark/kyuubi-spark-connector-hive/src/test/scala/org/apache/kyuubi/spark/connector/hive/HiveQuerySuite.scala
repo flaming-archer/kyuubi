@@ -446,6 +446,116 @@ class HiveQuerySuite extends KyuubiHiveTest {
     }
   }
 
+  test("dpp") {
+    val fact_sales = "hive.default.fact_sales"
+    val dim_products = "hive.default.dim_products"
+
+    withTable(fact_sales, dim_products) {
+      spark.sql(
+        s"""
+           | CREATE TABLE $fact_sales (
+           |  sale_id INT,
+           |  sale_date String,
+           |  sale_amount DECIMAL(10,2),
+           |  region_id INT
+           |  )
+           |  PARTITIONED BY (product_id INT, sale_year INT, sale_month INT)
+           |  STORED AS PARQUET
+           | """.stripMargin).collect()
+
+      spark.sql(
+        s"""
+           | CREATE TABLE $dim_products (
+           |    product_id INT,
+           |    product_name VARCHAR(100),
+           |    category VARCHAR(50),
+           |    price DECIMAL(10,2),
+           |    is_active BOOLEAN
+           |  )
+           |  STORED AS PARQUET
+           | """.stripMargin).collect()
+
+      // Insert dim data
+      spark.sql(
+        s"""
+           | INSERT INTO dim_products VALUES
+           | (1, 'Laptop', 'Electronics', 999.99, true),
+           | (2, 'Smartphone', 'Electronics', 699.99, true),
+           | (3, 'Desk Chair', 'Furniture', 199.99, true),
+           | (4, 'Coffee Table', 'Furniture', 149.99, false),
+           | (5, 'Monitor', 'Electronics', 249.99, true),
+           | (6, 'Keyboard', 'Electronics', 79.99, true),
+           | (7, 'Mouse', 'Electronics', 29.99, true),
+           | (8, 'Notebook', 'Stationery', 4.99, true),
+           | (9, 'Pen', 'Stationery', 1.99, true),
+           | (10, 'Headphones', 'Electronics', 129.99, false);
+           |""".stripMargin)
+
+      // Insert fact data
+      spark.sql(
+        s"""
+           | INSERT INTO fact_sales PARTITION (product_id=1, sale_year=2024, sale_month=1) VALUES
+           | (1, '2023-01-05', 999.99, 1),
+           | (2, '2023-01-10', 699.99, 1),
+           | (3, '2023-01-15', 999.99, 2),
+           | (4, '2023-01-20', 199.99, 3),
+           | (5, '2023-01-25', 249.99, 1);
+           |""".stripMargin)
+
+      spark.sql(
+        s"""
+           | INSERT INTO fact_sales PARTITION (product_id=2, sale_year=2024, sale_month=2) VALUES
+           | (6, '2023-02-05', 699.99, 2),
+           | (7, '2023-02-10', 79.99, 1),
+           | (8, '2023-02-15', 29.99, 3),
+           | (9, '2023-02-20', 249.99, 2),
+           | (10, '2023-02-25', 1.99, 1);
+           | """.stripMargin)
+
+      spark.sql(
+        s"""
+           | INSERT INTO fact_sales PARTITION (product_id=3, sale_year=2024, sale_month=3) VALUES
+           | (11, '2023-03-05', 999.99, 3),
+           | (12, '2023-03-10', 199.99, 1),
+           | (13, '2023-03-15', 79.99, 2),
+           | (14, '2023-03-20', 4.99, 3),
+           | (15, '2023-03-25', 129.99, 1);
+           | """.stripMargin)
+
+      spark.sql(
+        s"""
+           | INSERT INTO fact_sales PARTITION (product_id=4, sale_year=2025, sale_month=1) VALUES
+           | (16, '2024-01-05', 699.99, 1),
+           | (17, '2024-01-10', 149.99, 2),
+           | (18, '2024-01-15', 249.99, 3),
+           | (19, '2024-01-20', 29.99, 1),
+           | (20, '2024-01-25', 1.99, 2);
+           | """.stripMargin)
+
+      // Test multiple partition filters
+      val df1 = spark.sql(
+        s"""
+           |  SELECT f.sale_id, f.sale_date, d.product_name, f.sale_amount
+           |  FROM fact_sales f JOIN dim_products d ON f.product_id = d.product_id
+           |  WHERE d.category = 'Electronics' AND d.is_active = true
+           |""".stripMargin)
+      assert(df1.count() === 10)
+
+      // Test explain
+      val df3 = spark.sql(
+        s"""
+           |  EXPLAIN SELECT f.sale_id, f.sale_date, d.product_name, f.sale_amount
+           |  FROM fact_sales f JOIN dim_products d ON f.product_id = d.product_id
+           |  WHERE d.category = 'Electronics' AND d.is_active = true
+           |""".stripMargin)
+      assert(df3.count() === 1)
+      // contains like : PushedFilters: [IsNotNull(value), GreaterThan(value,1)]
+      assert(df3.collect().map(_.getString(0)).filter { s =>
+        s.contains("dynamicpruning") && !s.contains("dynamicpruning: []")
+      }.toSet.size == 1)
+    }
+  }
+
   private def readPartitionedTable(format: String, hiveTable: Boolean): Unit = {
     withSparkSession() { spark =>
       val table = "hive.default.employee"
