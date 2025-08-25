@@ -27,7 +27,7 @@
 
     <groupId>org.apache.kyuubi</groupId>
     <artifactId>kyuubi-parent</artifactId>
-    <version>1.11.0-SNAPSHOT</version>
+    <version>1.11.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Kyuubi Project Parent</name>
@@ -61,6 +61,7 @@
         <module>extensions/spark/kyuubi-spark-connector-common</module>
         <module>extensions/spark/kyuubi-spark-connector-tpcds</module>
         <module>extensions/spark/kyuubi-spark-connector-tpch</module>
+        <module>extensions/spark/kyuubi-spark-connector-hive</module>
         <module>extensions/spark/kyuubi-spark-lineage</module>
         <module>extensions/spark/kyuubi-spark-jvm-quake</module>
         <module>externals/kyuubi-chat-engine</module>
