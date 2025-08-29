@@ -49,7 +49,7 @@ class HiveCatalogFileIndex(
     mutable.Map()
 
   private val fileStatusCache =
-    HiveFileStatusCache.getOrCreate(sparkSession, catalogTable.identifier)
+    HiveFileStatusCache.getOrCreate(sparkSession, catalogTable.qualifiedName)
 
   private val baseLocation: Option[URI] = table.storage.locationUri
 

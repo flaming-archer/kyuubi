@@ -26,7 +26,6 @@ import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{FileStatusCache, NoopCache}
 import org.apache.spark.util.SizeEstimator
 
@@ -40,7 +39,7 @@ object HiveFileStatusCache {
    * @return a new FileStatusCache based on session configuration. Cache memory quota is
    *         shared across all clients.
    */
-  def getOrCreate(session: SparkSession, identifier: TableIdentifier): FileStatusCache =
+  def getOrCreate(session: SparkSession, qualifiedName: String): FileStatusCache =
     synchronized {
       if (session.sessionState.conf.manageFilesourcePartitions &&
         session.sessionState.conf.filesourcePartitionFileCacheSize > 0) {
@@ -49,7 +48,7 @@ object HiveFileStatusCache {
             session.sessionState.conf.filesourcePartitionFileCacheSize,
             session.sessionState.conf.metadataCacheTTL)
         }
-        sharedCache.createForNewClient(identifier)
+        sharedCache.createForNewClient(qualifiedName)
       } else {
         NoopCache
       }
