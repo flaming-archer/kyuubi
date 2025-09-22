@@ -20,11 +20,9 @@ package org.apache.kyuubi.spark.connector.hive
 import java.lang.{Boolean => JBoolean, Long => JLong}
 import java.net.URI
 import java.util
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -45,10 +43,10 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, GLOBAL_TEMP_DATABASE}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
 import org.apache.kyuubi.spark.connector.hive.HiveConnectorUtils.withSparkSQLConf
-import org.apache.kyuubi.spark.connector.hive.HiveTableCatalog.{getStorageFormatAndProvider, toCatalogDatabase, CatalogDatabaseHelper, IdentifierHelper, NamespaceHelper}
+import org.apache.kyuubi.spark.connector.hive.HiveTableCatalog.{CatalogDatabaseHelper, IdentifierHelper, NamespaceHelper, getStorageFormatAndProvider, toCatalogDatabase}
 import org.apache.kyuubi.spark.connector.hive.KyuubiHiveConnectorDelegationTokenProvider.metastoreTokenSignature
+import org.apache.kyuubi.spark.connector.hive.read.HiveFileStatusCache
 import org.apache.kyuubi.util.reflect.{DynClasses, DynConstructors}
 
 /**
@@ -388,7 +386,8 @@ class HiveTableCatalog(sparkSession: SparkSession)
         case _: NoSuchTableException =>
           throw new NoSuchTableException(ident)
       }
-
+      HiveFileStatusCache.getOrCreate(sparkSession,
+        catalogTable.database + "." + ident.name()).invalidateAll()
       loadTable(ident)
     }
 
@@ -421,8 +420,12 @@ class HiveTableCatalog(sparkSession: SparkSession)
       }
 
       // Load table to make sure the table exists
-      loadTable(oldIdent)
+      val table = loadTable(oldIdent)
       catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
+      if (table.isInstanceOf[HiveTable]) {
+        table.asInstanceOf[HiveTable].fileIndex.refresh()
+      }
+
     }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
