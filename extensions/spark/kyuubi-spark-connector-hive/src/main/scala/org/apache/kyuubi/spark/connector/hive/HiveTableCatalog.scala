@@ -387,7 +387,7 @@ class HiveTableCatalog(sparkSession: SparkSession)
           throw new NoSuchTableException(ident)
       }
       HiveFileStatusCache.getOrCreate(sparkSession,
-        catalogTable.database + "." + ident.name()).invalidateAll()
+        catalogName + "." + catalogTable.qualifiedName).invalidateAll()
       loadTable(ident)
     }
 
