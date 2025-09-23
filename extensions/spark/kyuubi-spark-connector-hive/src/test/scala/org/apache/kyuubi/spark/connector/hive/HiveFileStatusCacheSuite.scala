@@ -90,7 +90,7 @@ class HiveFileStatusCacheSuite extends KyuubiHiveTest {
     val properties = Maps.newHashMap[String, String]()
     properties.put("javax.jdo.option.ConnectionURL", "jdbc:derby:memory:memorydb;create=true")
     properties.put("javax.jdo.option.ConnectionDriverName", "org.apache.derby.jdbc.EmbeddedDriver")
-    catalog.initialize(super.catalogName, new CaseInsensitiveStringMap(properties))
+    catalog.initialize(catalogName, new CaseInsensitiveStringMap(properties))
     catalog
   }
 
