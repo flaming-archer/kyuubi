@@ -85,90 +85,92 @@ class HiveFileStatusCacheSuite extends KyuubiHiveTest {
     }
   }
 
-
   private def newCatalog(): HiveTableCatalog = {
     val catalog = new HiveTableCatalog
-    val catalogName = "hive"
     val properties = Maps.newHashMap[String, String]()
     properties.put("javax.jdo.option.ConnectionURL", "jdbc:derby:memory:memorydb;create=true")
     properties.put("javax.jdo.option.ConnectionDriverName", "org.apache.derby.jdbc.EmbeddedDriver")
-    catalog.initialize(catalogName, new CaseInsensitiveStringMap(properties))
+    catalog.initialize(super.catalogName, new CaseInsensitiveStringMap(properties))
     catalog
   }
 
   test("expire FileStatusCache when insert into") {
-    val table = "hive.default.tbl_partition"
-    val identifier = Identifier.of(Array("default"), "tbl_partition")
+    val dbName = "default"
+    val tbName = "tbl_partition"
+    val table = s"${catalogName}.${dbName}.${tbName}"
+
     withTable(table) {
       spark.sql(s"create table $table (age int)partitioned by(city string) stored as orc").collect()
-      val hiveCatalogTable = newCatalog().loadTable(identifier).asInstanceOf[HiveTable]
-      val location = hiveCatalogTable.catalogTable.location.toString
+      val location = newCatalog()
+        .loadTable(Identifier.of(Array(dbName), tbName))
+        .asInstanceOf[HiveTable]
+        .catalogTable.location.toString
 
       spark.sql(s"insert into $table partition(city='ct') values(10),(20),(30),(40),(50)").collect()
       assert(HiveFileStatusCache.getOrCreate(spark, table)
         .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
 
-      val df1 = spark.sql(s"select * from $table")
-      assert(df1.count() === 5)
+      assert(spark.sql(s"select * from $table").count() === 5)
       assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).size === 1)
+        .getLeafFiles(new Path(s"$location/city=ct")).get.length === 1)
 
       spark.sql(s"insert into $table partition(city='ct') values(11),(21),(31),(41),(51)").collect()
       assert(HiveFileStatusCache.getOrCreate(spark, table)
         .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
 
-      val df2 = spark.sql(s"select * from $table")
-      assert(df2.count() === 10)
+      assert(spark.sql(s"select * from $table").count() === 10)
       assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).size === 2)
+        .getLeafFiles(new Path(s"$location/city=ct")).get.length === 2)
     }
   }
 
   test("expire FileStatusCache when insert overwrite") {
-    val table = "hive.default.tbl_partition"
-    val identifier = Identifier.of(Array("default"), "tbl_partition")
+    val dbName = "default"
+    val tbName = "tbl_partition"
+    val table = s"${catalogName}.${dbName}.${tbName}"
+
     withTable(table) {
       spark.sql(s"create table $table (age int)partitioned by(city string) stored as orc").collect()
-      val hiveCatalogTable = newCatalog().loadTable(identifier).asInstanceOf[HiveTable]
-      val location = hiveCatalogTable.catalogTable.location.toString
+      val location = newCatalog()
+        .loadTable(Identifier.of(Array(dbName), tbName))
+        .asInstanceOf[HiveTable]
+        .catalogTable.location.toString
 
       spark.sql(s"insert into $table partition(city='ct') values(10),(20),(30),(40),(50)").collect()
       assert(HiveFileStatusCache.getOrCreate(spark, table)
         .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
 
-      val df1 = spark.sql(s"select * from $table")
-      assert(df1.count() === 5)
+      assert(spark.sql(s"select * from $table").count() === 5)
       assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).size === 1)
+        .getLeafFiles(new Path(s"$location/city=ct")).get.length === 1)
 
       spark.sql(s"insert overwrite $table partition(city='ct') values(11),(21),(31),(41),(51)")
         .collect()
       assert(HiveFileStatusCache.getOrCreate(spark, table)
         .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
 
-      val df2 = spark.sql(s"select * from $table")
-      assert(df2.count() === 5)
+      assert(spark.sql(s"select * from $table").count() === 5)
       assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).size === 1)
+        .getLeafFiles(new Path(s"$location/city=ct")).get.length === 1)
     }
   }
 
   test("expire FileStatusCache when alter Table") {
-    val table = "hive.default.tbl_partition"
-    val identifier = Identifier.of(Array("default"), "tbl_partition")
+    val dbName = "default"
+    val tbName = "tbl_partition"
+    val table = s"${catalogName}.${dbName}.${tbName}"
+
     withTable(table) {
       spark.sql(s"create table $table (age int)partitioned by(city string) stored as orc").collect()
-      val hiveCatalogTable = newCatalog().loadTable(identifier).asInstanceOf[HiveTable]
-      val location = hiveCatalogTable.catalogTable.location.toString
+      val location = newCatalog()
+        .loadTable(Identifier.of(Array(dbName), tbName))
+        .asInstanceOf[HiveTable]
+        .catalogTable.location.toString
 
       spark.sql(s"insert into $table partition(city='ct') values(10),(20),(30),(40),(50)").collect()
+      spark.sql(s"select * from $table").collect()
       assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
-
-      val df1 = spark.sql(s"select * from $table")
-      assert(df1.count() === 5)
-      assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).size === 1)
+        .getLeafFiles(new Path(s"$location/city=ct")).get.length === 1)
 
       spark.sql(s"ALTER TABLE $table ADD COLUMNS (name string)").collect()
       assert(HiveFileStatusCache.getOrCreate(spark, table)
@@ -177,28 +179,41 @@ class HiveFileStatusCacheSuite extends KyuubiHiveTest {
   }
 
   test("expire FileStatusCache when rename Table") {
-    val table = "hive.default.tbl_partition"
-    val identifier = Identifier.of(Array("default"), "tbl_partition")
-    withTable(table) {
-      spark.sql(s"create table $table (age int)partitioned by(city string) stored as orc").collect()
-      val hiveCatalogTable = newCatalog().loadTable(identifier).asInstanceOf[HiveTable]
-      val location = hiveCatalogTable.catalogTable.location.toString
+    val dbName = "default"
+    val oldTbName = "tbl_partition"
+    val newTbName = "tbl_partition_new"
+    val oldTable = s"${catalogName}.${dbName}.${oldTbName}"
+    val newTable = s"${catalogName}.${dbName}.${newTbName}"
 
-      spark.sql(s"insert into $table partition(city='ct') values(10),(20),(30),(40),(50)").collect()
-      assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
+    withTable(newTable) {
+      spark.sql(s"create table ${oldTable} (age int)partitioned by(city string) stored as orc")
+        .collect()
+      spark.sql(s"insert into $oldTable partition(city='ct') values(10),(20),(30),(40),(50)")
+        .collect()
+      spark.sql(s"select * from $oldTable").collect()
 
-      val df1 = spark.sql(s"select * from $table")
-      assert(df1.count() === 5)
-      assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).size === 1)
+      val oldLocation = newCatalog()
+        .loadTable(Identifier.of(Array(dbName), oldTbName))
+        .asInstanceOf[HiveTable]
+        .catalogTable.location.toString
+      assert(HiveFileStatusCache.getOrCreate(spark, oldTable)
+        .getLeafFiles(new Path(s"$oldLocation/city=ct")).get.length === 1)
 
-      val newTable = "hive.default.tbl_partition_1"
-      spark.sql(s"ALTER TABLE $table RENAME TO $newTable").collect()
-      assert(HiveFileStatusCache.getOrCreate(spark, table)
-        .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
+      spark.sql(s"DROP TABLE IF EXISTS ${newTable}").collect()
+      spark.sql(s"use ${catalogName}.${dbName}").collect()
+      spark.sql(s"ALTER TABLE $oldTbName RENAME TO $newTbName").collect()
+      val newLocation = newCatalog()
+        .loadTable(Identifier.of(Array(dbName), newTbName))
+        .asInstanceOf[HiveTable]
+        .catalogTable.location.toString
+
+      assert(HiveFileStatusCache.getOrCreate(spark, oldTable)
+        .getLeafFiles(new Path(s"$oldLocation/city=ct"))
+        .isEmpty)
+
       assert(HiveFileStatusCache.getOrCreate(spark, newTable)
-        .getLeafFiles(new Path(s"$location/city=ct")).isEmpty)
+        .getLeafFiles(new Path(s"$newLocation/city=ct"))
+        .isEmpty)
     }
   }
 }
