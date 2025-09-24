@@ -39,9 +39,9 @@ class HiveFileStatusCacheSuite extends KyuubiHiveTest {
       val files = (1 to 3).map(_ => new FileStatus())
 
       HiveFileStatusCache.resetForTesting()
-      val fileStatusCacheTabel1 = HiveFileStatusCache.getOrCreate(spark, "catalog.db.table1")
+      val fileStatusCacheTabel1 = HiveFileStatusCache.getOrCreate(spark, "catalog.db.cat1Table")
       fileStatusCacheTabel1.putLeafFiles(path, files.toArray)
-      val fileStatusCacheTabel2 = HiveFileStatusCache.getOrCreate(spark, "catalog.db.table1")
+      val fileStatusCacheTabel2 = HiveFileStatusCache.getOrCreate(spark, "catalog.db.cat1Table")
       val fileStatusCacheTabel3 = HiveFileStatusCache.getOrCreate(spark, "catalog.db.table2")
 
       // Exactly 3 files are cached.
@@ -214,6 +214,43 @@ class HiveFileStatusCacheSuite extends KyuubiHiveTest {
       assert(HiveFileStatusCache.getOrCreate(spark, newTable)
         .getLeafFiles(new Path(s"$newLocation/city=ct"))
         .isEmpty)
+    }
+  }
+
+  test("FileStatusCache isolated between different catalogs with same database.table") {
+    val catalog1 = catalogName
+    val catalog2 = "hive2"
+    val dbName = "default"
+    val tbName = "tbl_partition"
+    val dbTableShortName = s"${dbName}.${tbName}"
+    val cat1Table = s"${catalog1}.${dbTableShortName}"
+    val cat2Table = s"${catalog2}.${dbTableShortName}"
+
+    withTable(cat1Table, cat2Table) {
+      spark.sql(s"CREATE TABLE IF NOT EXISTS $cat1Table (age int)partitioned by(city string)" +
+          s" stored as orc").collect()
+      val location = newCatalog()
+        .loadTable(Identifier.of(Array(dbName), tbName))
+        .asInstanceOf[HiveTable]
+        .catalogTable.location.toString
+
+      spark.sql(s"use $catalog1").collect()
+      spark.sql(s"insert into $dbTableShortName partition(city='ct1') " +
+          s"values(11),(12),(13),(14),(15)").collect()
+      spark.sql(s"select * from $cat1Table where city='ct1'").collect()
+      assert(HiveFileStatusCache.getOrCreate(spark, cat1Table)
+        .getLeafFiles(new Path(s"$location/city=ct1"))
+        .get.length === 1)
+
+      spark.sql(s"use $catalog2").collect()
+      spark.sql(s"insert into $dbTableShortName partition(city='ct2') " +
+          s"values(21),(22),(23),(24),(25)").collect()
+      spark.sql(s"select * from $cat2Table where city='ct2'").collect()
+      assert(HiveFileStatusCache.getOrCreate(spark, cat2Table)
+        .getLeafFiles(new Path(s"$location/city=ct1")).isEmpty)
+      assert(HiveFileStatusCache.getOrCreate(spark, cat2Table)
+        .getLeafFiles(new Path(s"$location/city=ct2"))
+        .get.length === 1)
     }
   }
 }
