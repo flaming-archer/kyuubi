@@ -386,8 +386,7 @@ class HiveTableCatalog(sparkSession: SparkSession)
         case _: NoSuchTableException =>
           throw new NoSuchTableException(ident)
       }
-      HiveFileStatusCache.getOrCreate(sparkSession,
-        catalogName + "." + catalogTable.qualifiedName).invalidateAll()
+      invalidateTable(ident)
       loadTable(ident)
     }
 
@@ -400,9 +399,7 @@ class HiveTableCatalog(sparkSession: SparkSession)
             ident.asTableIdentifier,
             ignoreIfNotExists = true,
             purge = true /* skip HDFS trash */ )
-          if (table.isInstanceOf[HiveTable]) {
-            table.asInstanceOf[HiveTable].fileIndex.refresh()
-          }
+          invalidateTable(ident)
           true
         } else {
           false
@@ -422,11 +419,13 @@ class HiveTableCatalog(sparkSession: SparkSession)
       // Load table to make sure the table exists
       val table = loadTable(oldIdent)
       catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
-      if (table.isInstanceOf[HiveTable]) {
-        table.asInstanceOf[HiveTable].fileIndex.refresh()
-      }
-
+      invalidateTable(oldIdent)
     }
+
+  override def invalidateTable(ident: Identifier): Unit = {
+    val qualifiedName = s"$catalogName.${ident.namespace().mkString(".")}.${ident.name()}"
+    HiveFileStatusCache.getOrCreate(sparkSession, qualifiedName).invalidateAll()
+  }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
     properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
